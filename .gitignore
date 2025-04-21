@@ -1,0 +1,8 @@
+# Ignore ml folder
+/ml/
+
+# Other common ignores
+__pycache__/
+*.pyc
+.env
+*.log

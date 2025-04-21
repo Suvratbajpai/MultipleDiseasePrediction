@@ -6,23 +6,28 @@ Created on Fri Apr 18 10:17:20 2025
 """
 
 import pickle
+import numpy as np
 import streamlit as st
 from streamlit_option_menu import option_menu
+import pandas as pd
 
 # Set page configuration
 st.set_page_config(page_title="Health Assistant",layout="wide",page_icon="🧑‍⚕️")
 
 # loading the saved models
-diabetes_model = pickle.load(open('D:/mlProjectr/diabetes_model.sav', 'rb'))
-heart_disease_model = pickle.load(open('D:/mlProjectr/heart_disease_model.sav', 'rb'))
-parkinsons_model = pickle.load(open('D:/mlProjectr/parkinsons_model.sav', 'rb'))
+diabetes_model = pickle.load(open('./diabetes_model.sav', 'rb'))
+heart_disease_model = pickle.load(open('./heart_disease_model.sav', 'rb'))
+parkinsons_model = pickle.load(open('./parkinsons_model.sav', 'rb'))
+kidney_model = pickle.load(open('./kidney_model.sav', 'rb'))
 
 with st.sidebar:
     selected = option_menu('Multiple Disease Prediction System',
 
                            ['Diabetes Prediction',
                             'Heart Disease Prediction',
-                            'Parkinsons Prediction'],
+                            'Parkinsons Prediction',
+                            'Kidney Disease Prediction',
+                            'Disease-Symptom Prediction'],
                            menu_icon='hospital-fill',
                            icons=['activity', 'heart', 'person'],
                            default_index=0)
@@ -244,3 +249,147 @@ if selected == "Parkinsons Prediction":
             parkinsons_diagnosis = "The person does not have Parkinson's disease"
 
     st.success(parkinsons_diagnosis)
+
+    # Kidney Disease Prediction Page
+if selected == "Kidney Disease Prediction":
+
+    st.title("Kidney Disease Prediction using ML")
+
+    # Create input fields for the 16 required features
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        age = st.text_input('Age')
+
+    with col2:
+        bp = st.text_input('Blood Pressure')
+
+    with col3:
+        sg = st.text_input('Specific Gravity')
+
+    with col4:
+        su = st.text_input('Sugar')
+
+    with col1:
+        bgr = st.text_input('Blood Glucose Random')
+
+    with col2:
+        bu = st.text_input('Blood Urea')
+
+    with col3:
+        sc = st.text_input('Serum Creatinine')
+
+    with col4:
+        sod = st.text_input('Sodium')
+
+    with col1:
+        pot = st.text_input('Potassium')
+
+    with col2:
+        hemo = st.text_input('Hemoglobin')
+
+    with col3:
+        pcv = st.text_input('Packed Cell Volume')
+
+    with col4:
+        wc = st.text_input('White Blood Cell Count')
+
+    with col1:
+        htn = st.selectbox('Hypertension', ['no', 'yes'])
+
+    with col2:
+        dm = st.selectbox('Diabetes Mellitus', ['no', 'yes'])
+
+    with col3:
+        appet = st.selectbox('Appetite', ['poor', 'good'])
+
+    with col4:
+        pe = st.selectbox('Pedal Edema', ['no', 'yes'])
+
+    # Code for prediction
+    kidney_disease_diagnosis = ''
+
+    if st.button("Kidney Disease Test Result"):
+
+        try:
+            # Convert categorical to numeric
+            htn_val = 1 if htn == 'yes' else 0
+            dm_val = 1 if dm == 'yes' else 0
+            appet_val = 1 if appet == 'good' else 0
+            pe_val = 1 if pe == 'yes' else 0
+
+            # Create final input list
+            input_data = [
+                float(age), float(bp), float(sg), float(su), float(bgr),
+                float(bu), float(sc), float(sod), float(pot), float(hemo),
+                float(pcv), float(wc), htn_val, dm_val, appet_val, pe_val
+            ]
+
+            # Reshape and predict
+            input_array = np.array(input_data).reshape(1, -1)
+            prediction = kidney_model.predict(input_array)
+
+            if prediction[0] == 1:
+                kidney_disease_diagnosis = "The person has kidney disease"
+            else:
+                kidney_disease_diagnosis = "The person does not have kidney disease"
+
+        except:
+            kidney_disease_diagnosis = "Please fill all inputs correctly."
+
+    st.success(kidney_disease_diagnosis)
+
+    # Disease-Symptom Prediction Page
+if selected == "Disease-Symptom Prediction":
+
+    if "svm_disease_model.sav" not in st.session_state:
+        with open('svm_disease_model.sav', 'rb') as model_file:
+            st.session_state.svm_model = pickle.load(model_file)
+
+    if "svm_label_encoder.sav" not in st.session_state:
+        with open('svm_label_encoder.sav', 'rb') as encoder_file:
+            st.session_state.label_encoder = pickle.load(encoder_file)
+
+    svm_model = st.session_state.svm_model
+    le = st.session_state.label_encoder
+
+    df = pd.read_csv('Training.csv')
+    df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')  # Normalize column names
+    df = df.loc[:, ~df.columns.str.contains('^unnamed')]
+    symptom_list = df.columns.drop('prognosis').tolist()
+
+    st.title(" Disease Prediction from Symptoms")
+    selected_symptoms = st.multiselect("Select your symptoms", symptom_list)
+
+    if st.button("Predict Disease"):
+        if not selected_symptoms:
+            st.warning(" Please select at least one symptom.")
+        else:
+            # Prepare input vector
+            input_data = [1 if symptom in selected_symptoms else 0 for symptom in symptom_list]
+            input_array = np.array(input_data).reshape(1, -1)
+
+            # Predict disease
+            prediction = svm_model.predict(input_array)
+            predicted_disease = le.inverse_transform(prediction)[0]
+            st.success(f"🩺 **Predicted Disease**: `{predicted_disease}`")
+
+            # Predict probabilities
+            try:
+                probs = svm_model.predict_proba(input_array)[0]  # Get probs for all classes
+                top_indices = np.argsort(probs)[::-1]  # Sort by probability (desc)
+
+                top_prob = probs[top_indices[0]]
+                close_diseases = []
+
+                for idx in top_indices:
+                    if top_prob - probs[idx] <= 0.05:  # ≤5% difference
+                        disease = le.inverse_transform([idx])[0]
+                        close_diseases.append((disease, probs[idx]))
+
+                if close_diseases:
+                    st.subheader("Closest Matching Diseases (≤5% range):")
+                    for d, p in close_diseases:
+                        st.write(f"- {d}: {p * 100:.2f}%")
+            except AttributeError:
+                st.info("ℹ️ Probability estimates not available. Enable `probability=True` when training SVM.")
